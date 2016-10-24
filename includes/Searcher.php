@@ -7,6 +7,7 @@ use CirrusSearch\Search\FullTextResultsType;
 use CirrusSearch\Search\ResultsType;
 use CirrusSearch\Search\RescoreBuilder;
 use CirrusSearch\Search\SearchContext;
+use CirrusSearch\Search\CitolyticsResultsType;
 use CirrusSearch\Query\FullTextQueryBuilder;
 use Language;
 use MediaWiki\Logger\LoggerFactory;
@@ -43,6 +44,8 @@ class Searcher extends ElasticsearchIntermediary {
 	const HIGHLIGHT_PRE = '<span class="searchmatch">';
 	const HIGHLIGHT_POST = '</span>';
 	const HIGHLIGHT_REGEX = '/<span class="searchmatch">.*?<\/span>/';
+	const CITOLYTICS_FIELD = 'title';
+	const CITOLYTICS_INDEX_BASE = 'citolytics';
 
 	/**
 	 * Maximum title length that we'll check in prefix and keyword searches.
@@ -943,5 +946,26 @@ class Searcher extends ElasticsearchIntermediary {
 			$queryType,
 			$extra
 		);
+	}
+
+	/**
+	 * Retrieves article recommendations from Citolytics index. Each object in Citolytics index contains as list (array)
+	 * with related articles. We run a simple match query to get the list and then transform it to valid result set.
+	 *
+	 * @param string $title title of article to retrieve recommendations for
+	 * @return Status <ResultSet>
+	 */
+	public function citolyticsArticles($title) {
+
+		// Perform match query with $title on Citolytics index
+		$query = new \Elastica\Query\Match( self::CITOLYTICS_FIELD, $title );
+		$this->indexBaseName = self::CITOLYTICS_INDEX_BASE;
+
+		$this->getSearchContext()->setMainQuery( $query );
+
+		// Transform to valid result set
+		$this->resultsType = new CitolyticsResultsType();
+
+		return $this->searchOne($title);
 	}
 }

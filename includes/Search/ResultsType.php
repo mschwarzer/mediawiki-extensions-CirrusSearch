@@ -629,3 +629,96 @@ class InterwikiResultsType implements ResultsType {
 		return false;
 	}
 }
+
+/**
+ * Result type for a Citolytics search.
+ */
+class CitolyticsResultsType implements ResultsType {
+	/**
+	 * @return false|string|array corresponding to Elasticsearch source filtering syntax
+	 */
+	public function getSourceFiltering() {
+		$fields = [ 'id', 'title', 'namespace', 'redirect.*', 'timestamp', 'text_bytes', 'related_content' ];
+		if ( $this->prefix ) {
+			$fields[] = 'namespace_text';
+		}
+
+		return $fields;
+	}
+
+	/**
+	 * @return string
+	 */
+	public function getFields() {
+		return array(); // all data is stored in source field.
+	}
+
+	/**
+	 * @param array $highlightSource
+	 * @return array|null
+	 */
+	public function getHighlightingConfiguration( array $highlightSource ) {
+		return null;
+	}
+
+	/**
+	 * Citolytics recommendations are stored as array in the citolytics_content index. Array elements need to be transformed
+	 * to regular ES result set to be accessible via CirrusSearch as individual search results.
+	 *
+	 * @param SearchContext $context
+	 * @param \Elastica\ResultSet $result
+	 * @return ResultSet
+	 */
+	public function transformElasticsearchResult( SearchContext $context, \Elastica\ResultSet $result ) {
+
+		$docs = $result->getDocuments();
+
+		// Check for empty results
+		if (count($docs) < 1 || isset($docs[0]) || isset($docs[0]->getData()['related_content'])
+			|| count($docs[0]->getData()['related_content']) < 1) {
+			return new EmptyResultSet();
+		}
+
+		$relatedContent = $docs[0]->getData()['related_content'];
+
+		// Overwrite hits in original response with names
+		$overwritten = $result->getResponse()->getData();
+		$overwritten['hits'] = array(
+			'total' => count($relatedContent), // Needs to be set for pagination
+			'max_score' => 1,
+			'hits' => array()
+		);
+
+		// Generate artificial search results
+		foreach($relatedContent as $data) {
+			$overwritten['hits']['hits'][] = array(
+				'_score' => 1,
+				'_source' => array(
+					'title' => $data['title'],
+					'namespace' => 0
+				),
+				'fields' => array(),
+			);
+		}
+
+		// Build new result set from original query and overwritten reponse
+		$response = new \Elastica\Response($overwritten, $result->getResponse()->getStatus());
+		$result = \Elastica\ResultSet::create($response, $result->getQuery());
+
+		return new ResultSet(
+			$context->getSuggestPrefixes(),
+			$context->getSuggestSuffixes(),
+			$result,
+			$context->isSyntaxUsed(),
+			$this->prefix
+		);
+	}
+
+	/**
+	 * @return EmptyResultSet
+	 */
+	public function createEmptyResult() {
+		return new EmptyResultSet();
+	}
+
+}

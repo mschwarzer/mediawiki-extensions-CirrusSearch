@@ -42,6 +42,9 @@ class CirrusSearch extends SearchEngine {
 	/** @const string name of the prefixsearch fallback profile */
 	const COMPLETION_PREFIX_FALLBACK_PROFILE = 'classic';
 
+	/** @const string query prefix that triggers Citolytics */
+	const CITOLYTICS_PREFIX = 'citolytics:';
+
 	/**
 	 * @var string The last prefix substituted by replacePrefixes.
 	 */
@@ -373,39 +376,45 @@ class CirrusSearch extends SearchEngine {
 		$returnExplain = $this->request && $this->request->getVal( 'cirrusExplain' ) !== null;
 		$searcher->setReturnExplain( $returnExplain );
 
-		if ( $this->lastNamespacePrefix ) {
-			$searcher->addSuggestPrefix( $this->lastNamespacePrefix );
+		// Check if query term starts with Citolytics prefix
+		if ( substr( $term, 0, strlen( self::CITOLYTICS_PREFIX ) ) === self::CITOLYTICS_PREFIX ) {
+			$term = substr( $term, strlen( self::CITOLYTICS_PREFIX ) );
+			$status = $searcher->citolyticsArticles( $term );
 		} else {
-			$searcher->updateNamespacesFromQuery( $term );
-		}
-		$highlightingConfig = FullTextResultsType::HIGHLIGHT_ALL;
-		if ( $this->request ) {
-			if ( $this->request->getVal( 'cirrusSuppressSuggest' ) !== null ) {
-				$this->showSuggestion = false;
-			}
-			if ( $this->request->getVal( 'cirrusSuppressTitleHighlight' ) !== null ) {
-				$highlightingConfig ^= FullTextResultsType::HIGHLIGHT_TITLE;
-			}
-			if ( $this->request->getVal( 'cirrusSuppressAltTitle' ) !== null ) {
-				$highlightingConfig ^= FullTextResultsType::HIGHLIGHT_ALT_TITLE;
-			}
-			if ( $this->request->getVal( 'cirrusSuppressSnippet' ) !== null ) {
-				$highlightingConfig ^= FullTextResultsType::HIGHLIGHT_SNIPPET;
-			}
-			if ( $this->request->getVal( 'cirrusHighlightDefaultSimilarity' ) === 'no' ) {
-				$highlightingConfig ^= FullTextResultsType::HIGHLIGHT_WITH_DEFAULT_SIMILARITY;
-			}
-			if ( $this->request->getVal( 'cirrusHighlightAltTitleWithPostings' ) === 'no' ) {
-				$highlightingConfig ^= FullTextResultsType::HIGHLIGHT_ALT_TITLES_WITH_POSTINGS;
-			}
-		}
-		if ( $this->namespaces && !in_array( NS_FILE, $this->namespaces ) ) {
-			$highlightingConfig ^= FullTextResultsType::HIGHLIGHT_FILE_TEXT;
-		}
 
-		$searcher->setResultsType( new FullTextResultsType( $highlightingConfig, $config ? $config->getWikiCode() : '') );
-		$status = $searcher->searchText( $term, $this->showSuggestion );
+			if ($this->lastNamespacePrefix) {
+				$searcher->addSuggestPrefix($this->lastNamespacePrefix);
+			} else {
+				$searcher->updateNamespacesFromQuery($term);
+			}
+			$highlightingConfig = FullTextResultsType::HIGHLIGHT_ALL;
+			if ($this->request) {
+				if ($this->request->getVal('cirrusSuppressSuggest') !== null) {
+					$this->showSuggestion = false;
+				}
+				if ($this->request->getVal('cirrusSuppressTitleHighlight') !== null) {
+					$highlightingConfig ^= FullTextResultsType::HIGHLIGHT_TITLE;
+				}
+				if ($this->request->getVal('cirrusSuppressAltTitle') !== null) {
+					$highlightingConfig ^= FullTextResultsType::HIGHLIGHT_ALT_TITLE;
+				}
+				if ($this->request->getVal('cirrusSuppressSnippet') !== null) {
+					$highlightingConfig ^= FullTextResultsType::HIGHLIGHT_SNIPPET;
+				}
+				if ($this->request->getVal('cirrusHighlightDefaultSimilarity') === 'no') {
+					$highlightingConfig ^= FullTextResultsType::HIGHLIGHT_WITH_DEFAULT_SIMILARITY;
+				}
+				if ($this->request->getVal('cirrusHighlightAltTitleWithPostings') === 'no') {
+					$highlightingConfig ^= FullTextResultsType::HIGHLIGHT_ALT_TITLES_WITH_POSTINGS;
+				}
+			}
+			if ($this->namespaces && !in_array(NS_FILE, $this->namespaces)) {
+				$highlightingConfig ^= FullTextResultsType::HIGHLIGHT_FILE_TEXT;
+			}
 
+			$searcher->setResultsType(new FullTextResultsType($highlightingConfig, $config ? $config->getWikiCode() : ''));
+			$status = $searcher->searchText($term, $this->showSuggestion);
+		}
 		$this->lastSearchMetrics = $searcher->getSearchMetrics();
 
 		if ( !$status->isOK() ) {
